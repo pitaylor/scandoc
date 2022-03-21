@@ -8,27 +8,27 @@ import (
 )
 
 type Service struct {
-	dir      string
-	scanJobs chan *Job
-	pdfJobs  chan *Job
+	Dir      string
+	ScanJobs chan *Job
+	PdfJobs  chan *Job
 }
 
 func NewService() *Service {
 	return &Service{
-		dir:      "scans",
-		scanJobs: make(chan *Job),
-		pdfJobs:  make(chan *Job, 100),
+		Dir:      "scans",
+		ScanJobs: make(chan *Job),
+		PdfJobs:  make(chan *Job, 100),
 	}
 }
 
 func (s *Service) WorkScanJobs() {
-	for job := range s.scanJobs {
+	for job := range s.ScanJobs {
 		log.Println("scan started")
 
 		err := job.Scan()
 
 		if err == nil {
-			s.pdfJobs <- job
+			s.PdfJobs <- job
 			log.Println("scan done")
 		} else {
 			log.Println("scan failed", err)
@@ -37,7 +37,7 @@ func (s *Service) WorkScanJobs() {
 }
 
 func (s *Service) WorkPdfJobs() {
-	for job := range s.pdfJobs {
+	for job := range s.PdfJobs {
 		log.Println("pdf started")
 
 		err := job.GeneratePDF()
@@ -62,7 +62,7 @@ func (s *Service) Start() {
 			return
 		}
 
-		s.scanJobs <- parseJob(s.dir, req.URL.Query())
+		s.ScanJobs <- parseJob(s.Dir, req.URL.Query())
 	})
 
 	log.Println("listening on port 8090")

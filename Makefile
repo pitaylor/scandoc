@@ -1,6 +1,6 @@
 .PHONY: build start test clean
 
-PROGRAM = docscan
+PROGRAM = scandoc
 
 build: out/$(PROGRAM)-linux-amd64
 

@@ -7,7 +7,7 @@ import (
 func main() {
 	s := NewService()
 
-	flag.StringVar(&s.dir, "dir", "scans", "directory for scans")
+	flag.StringVar(&s.Dir, "dir", "scans", "directory for scans")
 	flag.Parse()
 
 	s.Start()
