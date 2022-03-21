@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+echo "RUN: ocrmypdf ${*}"
+
+while true; do
+  case "${1}" in
+  -*)
+    shift
+    ;;
+  *)
+    break
+    ;;
+  esac
+done
+
+input=${1?:is missing}
+output=${2?:is missing}
+
+cat "${input}" > "${output}"

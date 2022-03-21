@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+echo "RUN: img2pdf ${*}"
+
+while true; do
+  case "${1}" in
+  --output)
+    output="${2}"
+    shift 2
+    ;;
+  *)
+    break
+    ;;
+  esac
+done
+
+for f in "${@}"; do
+  cat "${f}" >> "${output?:is missing}"
+done

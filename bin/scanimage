@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+echo "RUN: scanimage ${*}"
+echo "page1" > out1.tif
+echo "page2" > out2.tif
+echo "page3" > out3.tif
