@@ -32,19 +32,19 @@ func (s *Settings) ParseValues(values url.Values) {
 		case "mode":
 			s.Mode = values.Get(k)
 		case "resolution":
-			if value, err := strconv.Atoi(values.Get(k)); err != nil {
+			if value, err := strconv.Atoi(values.Get(k)); err == nil {
 				s.Resolution = value
 			} else {
 				log.Printf("error parsing %v: %v\n", k, err)
 			}
 		case "brightness":
-			if value, err := strconv.Atoi(values.Get(k)); err != nil {
+			if value, err := strconv.Atoi(values.Get(k)); err == nil {
 				s.Brightness = value
 			} else {
 				log.Printf("error parsing %v: %v\n", k, err)
 			}
 		case "contrast":
-			if value, err := strconv.Atoi(values.Get(k)); err != nil {
+			if value, err := strconv.Atoi(values.Get(k)); err == nil {
 				s.Contrast = value
 			} else {
 				log.Printf("error parsing %v: %v\n", k, err)
