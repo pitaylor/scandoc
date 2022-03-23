@@ -68,7 +68,13 @@ func (j *Job) Scan() error {
 
 	cmd.Dir = j.Dir
 
-	return runCommand(cmd)
+	err = runCommand(cmd)
+
+	if err != nil {
+		_ = j.CleanUp()
+	}
+
+	return err
 }
 
 // GeneratePDF creates a PDF named Name using img2pdf and ocrmypdf on the .tif files in Dir.
@@ -110,6 +116,10 @@ func (j *Job) GeneratePDF() error {
 		return err
 	}
 
+	return j.CleanUp()
+}
+
+func (j *Job) CleanUp() error {
 	return os.RemoveAll(j.Dir)
 }
 
