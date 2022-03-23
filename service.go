@@ -55,14 +55,20 @@ func (s *Service) Start() {
 	go s.WorkPdfJobs()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		log.Println("scan requested")
+		err := req.ParseForm()
+
+		if err != nil {
+			log.Println("error parsing request")
+		}
+
+		log.Println("scan requested", req.Form)
 
 		if req.Method != "POST" {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
-		s.ScanJobs <- parseJob(s.Dir, req.URL.Query())
+		s.ScanJobs <- parseJob(s.Dir, req.Form)
 	})
 
 	log.Println("listening on port 8090")
