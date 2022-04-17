@@ -38,14 +38,29 @@ func (s *Service) WorkScanJobs() {
 
 func (s *Service) WorkPdfJobs() {
 	for job := range s.PdfJobs {
-		log.Println("pdf started")
+		log.Println("job started")
 
-		err := job.GeneratePDF()
+		var err error
+		stages := job.Settings.Stages
+		stageGlob := "out*.tif"
+
+		if contains(stages, "clean") {
+			err = job.CleanImages(stageGlob)
+			stageGlob = "clean*.png"
+		}
+
+		if contains(stages, "pdf") && err == nil {
+			err = job.GeneratePDF(stageGlob)
+
+			if err == nil {
+				err = job.CleanUp()
+			}
+		}
 
 		if err == nil {
-			log.Println("pdf done")
+			log.Println("job done")
 		} else {
-			log.Println("pdf failed", err)
+			log.Println("job failed", err)
 		}
 	}
 }
@@ -79,6 +94,7 @@ func (s *Service) Start() {
 	}
 }
 
+// parseJob creates a Job from POST/GET parameters.
 func parseJob(dir string, query url.Values) *Job {
 	name := time.Now().Format("2006-01-02")
 
@@ -92,4 +108,14 @@ func parseJob(dir string, query url.Values) *Job {
 	settings.ParseValues(query)
 
 	return NewJob(dir, name, settings)
+}
+
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+
+	return false
 }

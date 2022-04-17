@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,8 @@ type Job struct {
 	Dir      string
 	Settings *Settings
 }
+
+var numberRegex = regexp.MustCompile("[0-9]+")
 
 func NewJob(dir string, baseName string, settings *Settings) *Job {
 	i := 0
@@ -43,7 +46,7 @@ func NewJob(dir string, baseName string, settings *Settings) *Job {
 	}
 }
 
-// Scan scans a document using scanimage and produces a .tif file for each page in Dir.
+// Scan scans a document using scanimage and produces a .tif file for each page in Dir named `outN.tif`.
 func (j *Job) Scan() error {
 	_, err := os.Stat(j.Dir)
 
@@ -77,17 +80,31 @@ func (j *Job) Scan() error {
 	return err
 }
 
-// GeneratePDF creates a PDF named Name using img2pdf and ocrmypdf on the .tif files in Dir.
-func (j *Job) GeneratePDF() error {
-	files, err := filepath.Glob(filepath.Join(j.Dir, "out*.tif"))
+// CleanImages cleans up scanned images specified by `globPattern` using NoteShrink and produces files named
+// `cleanN.png` in Dir.
+func (j *Job) CleanImages(globPattern string) error {
+	files, err := j.globFiles(globPattern)
 
 	if err != nil {
 		return err
 	}
 
-	sort.Slice(files, func(i, j int) bool {
-		return parseIndex(files[i]) < parseIndex(files[j])
-	})
+	var args []string
+	args = append(args, "-c", "true") // skip pdf conversion
+	args = append(args, "-b", filepath.Join(j.Dir, "clean"))
+	args = append(args, files...)
+
+	cmd := exec.Command("noteshrink", args...)
+	return runCommand(cmd)
+}
+
+// GeneratePDF creates a PDF named Name from image files specified by `globPattern` using img2pdf and ocrmypdf.
+func (j *Job) GeneratePDF(globPattern string) error {
+	files, err := j.globFiles(globPattern)
+
+	if err != nil {
+		return err
+	}
 
 	var args []string
 	pdfFile := filepath.Join(j.Dir, "out.pdf")
@@ -104,23 +121,29 @@ func (j *Job) GeneratePDF() error {
 	cmd = exec.Command(
 		"ocrmypdf",
 		"--rotate-pages",
-		"--deskew",
 		"--clean",
-		"--clean-final",
 		pdfFile,
 		j.Name,
 	)
-	err = runCommand(cmd)
-
-	if err != nil {
-		return err
-	}
-
-	return j.CleanUp()
+	return runCommand(cmd)
 }
 
 func (j *Job) CleanUp() error {
 	return os.RemoveAll(j.Dir)
+}
+
+func (j *Job) globFiles(globPattern string) ([]string, error) {
+	files, err := filepath.Glob(filepath.Join(j.Dir, globPattern))
+
+	if err != nil {
+		return files, err
+	}
+
+	sort.Slice(files, func(i, j int) bool {
+		return parseIndex(files[i]) < parseIndex(files[j])
+	})
+
+	return files, nil
 }
 
 func runCommand(cmd *exec.Cmd) error {
@@ -135,11 +158,17 @@ func runCommand(cmd *exec.Cmd) error {
 
 func parseIndex(path string) int {
 	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	str := strings.TrimPrefix(base, "out")
-	i, err := strconv.Atoi(str)
+	matches := numberRegex.FindAllString(base, 1)
 
-	if err != nil {
-		log.Println("error parsing batch index", err)
+	i := 0
+	var err error
+
+	if len(matches) != 0 {
+		i, err = strconv.Atoi(matches[0])
+
+		if err != nil {
+			log.Println("error parsing batch index", err)
+		}
 	}
 
 	return i

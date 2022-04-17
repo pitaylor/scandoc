@@ -12,6 +12,7 @@ type Settings struct {
 	Resolution int
 	Brightness int
 	Contrast   int
+	Stages     []string
 }
 
 func NewSettings() *Settings {
@@ -21,34 +22,38 @@ func NewSettings() *Settings {
 		Resolution: 300,
 		Brightness: 0,
 		Contrast:   0,
+		Stages:     []string{"clean", "pdf"},
 	}
 }
 
 func (s *Settings) ParseValues(values url.Values) {
 	for k, _ := range values {
+		stringVal := values.Get(k)
 		switch k {
 		case "source":
-			s.Source = values.Get(k)
+			s.Source = stringVal
 		case "mode":
-			s.Mode = values.Get(k)
+			s.Mode = stringVal
 		case "resolution":
-			if value, err := strconv.Atoi(values.Get(k)); err == nil {
+			if value, err := strconv.Atoi(stringVal); err == nil {
 				s.Resolution = value
 			} else {
 				log.Printf("error parsing %v: %v\n", k, err)
 			}
 		case "brightness":
-			if value, err := strconv.Atoi(values.Get(k)); err == nil {
+			if value, err := strconv.Atoi(stringVal); err == nil {
 				s.Brightness = value
 			} else {
 				log.Printf("error parsing %v: %v\n", k, err)
 			}
 		case "contrast":
-			if value, err := strconv.Atoi(values.Get(k)); err == nil {
+			if value, err := strconv.Atoi(stringVal); err == nil {
 				s.Contrast = value
 			} else {
 				log.Printf("error parsing %v: %v\n", k, err)
 			}
+		case "stages":
+			s.Stages = values[k]
 		}
 	}
 }
