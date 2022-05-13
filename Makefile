@@ -1,29 +1,36 @@
-.PHONY: build start test clean
+.PHONY: all build container image start test clean
 
 PROGRAM = scandoc
+DOCKER_CONTEXT = default
+DOCKER_IMAGE = docker.entangle.net/$(PROGRAM):latest
+SCAN_DIR = $(realpath scans)
+DEVICE_MAJOR = 189
 
-SCANNER_DEVICE_MAJOR = 189
+# load variable overrides
+-include .env
 
 build: out/$(PROGRAM)-linux-amd64
 
 out/$(PROGRAM)-linux-amd64: $(wildcard *.go)
-	GOOS=linux GOARCH=amd64 go build -o $@ $^
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $@ $^
+
+image:
+	docker --context $(DOCKER_CONTEXT) build --tag $(DOCKER_IMAGE) .
+
+all: build image
 
 start:
-	bash -c "PATH=\"$(shell pwd)/bin:$(PATH)\" go run ."
+	bash -c "PATH=\"$(realpath bin):$(PATH)\" go run ."
 
-start_remote: build
-	scp out/$(PROGRAM)-linux-amd64 bemo.entangle.net:/tmp/$(PROGRAM).testbuild
-
-	docker --context production run --rm -it \
+container: image
+	docker --context $(DOCKER_CONTEXT) run --rm -it \
 		-v /dev/bus:/dev/bus:ro \
 		-v /dev/serial:/dev/serial:ro \
-		-v /mnt/ptaylor/scans:/work/scans \
-		-v /tmp/$(PROGRAM).testbuild:/usr/local/bin/scandoc \
+		-v "$(SCAN_DIR):/work/scans" \
 		-p 8090:8090 \
 		--cap-add SYS_PTRACE \
-		--device-cgroup-rule "c $(SCANNER_DEVICE_MAJOR):* rwm" \
-		homelab_scanner \
+		--device-cgroup-rule "c $(DEVICE_MAJOR):* rwm" \
+		$(DOCKER_IMAGE) \
 		scandoc -dir /work/scans
 
 test:
