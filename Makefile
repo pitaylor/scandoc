@@ -1,4 +1,4 @@
-.PHONY: all build container image start test clean
+.PHONY: build container image setup start test clean
 
 PROGRAM = scandoc
 DOCKER_CONTEXT = default
@@ -9,32 +9,36 @@ DEVICE_MAJOR = 189
 # load variable overrides
 -include .env
 
+export DOCKER_CONTEXT
+export DOCKER_IMAGE
+export SCAN_DIR
+export DEVICE_MAJOR
+
 build: out/$(PROGRAM)-linux-amd64
 
-out/$(PROGRAM)-linux-amd64: $(wildcard *.go)
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $@ $^
+ui/build: $(wildcard ui/package*.json) ui/public ui/src
+	# CI=true is used to treat build warnings as errors
+	cd ui && CI=true npm run build
+
+out/$(PROGRAM)-linux-amd64: ui/build $(wildcard *.go)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $@ $(wildcard *.go)
 
 image:
 	docker --context $(DOCKER_CONTEXT) build --tag $(DOCKER_IMAGE) .
 
-all: build image
+setup:
+	cd ui && npm $(if $(filter true,$(CI)),clean-install,install)
 
 start:
-	bash -c "PATH=\"$(realpath bin):$(PATH)\" go run ."
+	scripts/start.sh
 
 container: image
-	docker --context $(DOCKER_CONTEXT) run --rm -it \
-		-v /dev/bus:/dev/bus:ro \
-		-v /dev/serial:/dev/serial:ro \
-		-v "$(SCAN_DIR):/work/scans" \
-		-p 8090:8090 \
-		--cap-add SYS_PTRACE \
-		--device-cgroup-rule "c $(DEVICE_MAJOR):* rwm" \
-		$(DOCKER_IMAGE) \
-		scandoc -dir /work/scans
+	scripts/container.sh
 
 test:
+	# CI=true is used to run tests non-interactively
 	go test -v ./...
+	cd ui && CI=true npm test
 
 clean:
-	rm -rf out scans
+	rm -rf out scans ui/build

@@ -12,7 +12,8 @@ type Settings struct {
 	Resolution int
 	Brightness int
 	Contrast   int
-	Stages     []string
+	Clean      bool
+	Pdf        bool
 }
 
 func NewSettings() *Settings {
@@ -22,7 +23,8 @@ func NewSettings() *Settings {
 		Resolution: 300,
 		Brightness: 0,
 		Contrast:   0,
-		Stages:     []string{"clean", "pdf"},
+		Clean:      true,
+		Pdf:        true,
 	}
 }
 
@@ -52,8 +54,14 @@ func (s *Settings) ParseValues(values url.Values) {
 			} else {
 				log.Printf("error parsing %v: %v\n", k, err)
 			}
-		case "stages":
-			s.Stages = values[k]
+		case "clean":
+			if stringVal == "false" {
+				s.Clean = false
+			}
+		case "pdf":
+			if stringVal == "false" {
+				s.Pdf = false
+			}
 		}
 	}
 }

@@ -1,11 +1,23 @@
+FROM node:17.9 as build-ui
+
+WORKDIR /work
+
+COPY ui/package.json ./
+COPY ui/package-lock.json ./
+RUN npm clean-install
+COPY ui/ ./
+RUN npm run build
+
 FROM golang:1.17-alpine as build-scandoc
 
 WORKDIR /build
 
 COPY go.* ./
-RUN go mod download
+RUN go mod download \
+    && mkdir -p ui/build
 
 COPY *.go ./
+COPY --from=build-ui /work/build ./ui/build
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o scandoc
 
