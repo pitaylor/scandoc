@@ -48,12 +48,12 @@ func (s *Service) WorkPdfJobs() {
 		var err error
 		stageGlob := "out*.tif"
 
-		if job.Settings.Clean {
+		if job.settings.Clean {
 			err = job.CleanImages(stageGlob)
 			stageGlob = "clean*.png"
 		}
 
-		if job.Settings.Pdf && err == nil {
+		if job.settings.Pdf && err == nil {
 			err = job.GeneratePDF(stageGlob)
 
 			if err == nil {
@@ -124,14 +124,4 @@ func parseJob(dir string, query url.Values) *Job {
 	settings.ParseValues(query)
 
 	return NewJob(dir, name, settings)
-}
-
-func contains(s []string, str string) bool {
-	for _, v := range s {
-		if v == str {
-			return true
-		}
-	}
-
-	return false
 }

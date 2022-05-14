@@ -30,10 +30,10 @@ setup:
 	cd ui && npm $(if $(filter true,$(CI)),clean-install,install)
 
 start:
-	scripts/start.sh
+	@scripts/start.sh
 
 container: image
-	scripts/container.sh
+	@scripts/container.sh
 
 test:
 	# CI=true is used to run tests non-interactively

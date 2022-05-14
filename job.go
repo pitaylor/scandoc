@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/google/uuid"
 	"log"
 	"os"
 	"os/exec"
@@ -12,9 +13,10 @@ import (
 )
 
 type Job struct {
-	Name     string
-	Dir      string
-	Settings *Settings
+	id       string
+	name     string
+	dir      string
+	settings *Settings
 }
 
 var numberRegex = regexp.MustCompile("[0-9]+")
@@ -40,18 +42,19 @@ func NewJob(dir string, baseName string, settings *Settings) *Job {
 	}
 
 	return &Job{
-		Name:     path + suffix + ".pdf",
-		Dir:      path + suffix,
-		Settings: settings,
+		id:       uuid.NewString(),
+		name:     path + suffix + ".pdf",
+		dir:      path + suffix,
+		settings: settings,
 	}
 }
 
-// Scan scans a document using scanimage and produces a .tif file for each page in Dir named `outN.tif`.
+// Scan scans a document using scanimage and produces a .tif file for each page in dir named `outN.tif`.
 func (j *Job) Scan() error {
-	_, err := os.Stat(j.Dir)
+	_, err := os.Stat(j.dir)
 
 	if os.IsNotExist(err) {
-		err = os.MkdirAll(j.Dir, os.ModePerm)
+		err = os.MkdirAll(j.dir, os.ModePerm)
 		if err != nil {
 			return err
 		}
@@ -61,15 +64,15 @@ func (j *Job) Scan() error {
 		"scanimage",
 		"--format=tiff",
 		"--batch",
-		"--source", j.Settings.Source,
-		"--mode", j.Settings.Mode,
-		"--resolution", strconv.Itoa(j.Settings.Resolution),
-		"--brightness", strconv.Itoa(j.Settings.Brightness),
-		"--contrast", strconv.Itoa(j.Settings.Contrast),
+		"--source", j.settings.Source,
+		"--mode", j.settings.Mode,
+		"--resolution", strconv.Itoa(j.settings.Resolution),
+		"--brightness", strconv.Itoa(j.settings.Brightness),
+		"--contrast", strconv.Itoa(j.settings.Contrast),
 		"--page-height", "0",
 	)
 
-	cmd.Dir = j.Dir
+	cmd.Dir = j.dir
 
 	err = runCommand(cmd)
 
@@ -81,7 +84,7 @@ func (j *Job) Scan() error {
 }
 
 // CleanImages cleans up scanned images specified by `globPattern` using NoteShrink and produces files named
-// `cleanN.png` in Dir.
+// `cleanN.png` in dir.
 func (j *Job) CleanImages(globPattern string) error {
 	files, err := j.globFiles(globPattern)
 
@@ -91,14 +94,14 @@ func (j *Job) CleanImages(globPattern string) error {
 
 	var args []string
 	args = append(args, "-c", "true") // skip pdf conversion
-	args = append(args, "-b", filepath.Join(j.Dir, "clean"))
+	args = append(args, "-b", filepath.Join(j.dir, "clean"))
 	args = append(args, files...)
 
 	cmd := exec.Command("noteshrink", args...)
 	return runCommand(cmd)
 }
 
-// GeneratePDF creates a PDF named Name from image files specified by `globPattern` using img2pdf and ocrmypdf.
+// GeneratePDF creates a PDF named `name` from image files specified by `globPattern` using img2pdf and ocrmypdf.
 func (j *Job) GeneratePDF(globPattern string) error {
 	files, err := j.globFiles(globPattern)
 
@@ -107,7 +110,7 @@ func (j *Job) GeneratePDF(globPattern string) error {
 	}
 
 	var args []string
-	pdfFile := filepath.Join(j.Dir, "out.pdf")
+	pdfFile := filepath.Join(j.dir, "out.pdf")
 	args = append(args, "--output", pdfFile)
 	args = append(args, files...)
 
@@ -123,17 +126,17 @@ func (j *Job) GeneratePDF(globPattern string) error {
 		"--rotate-pages",
 		"--clean",
 		pdfFile,
-		j.Name,
+		j.name,
 	)
 	return runCommand(cmd)
 }
 
 func (j *Job) CleanUp() error {
-	return os.RemoveAll(j.Dir)
+	return os.RemoveAll(j.dir)
 }
 
 func (j *Job) globFiles(globPattern string) ([]string, error) {
-	files, err := filepath.Glob(filepath.Join(j.Dir, globPattern))
+	files, err := filepath.Glob(filepath.Join(j.dir, globPattern))
 
 	if err != nil {
 		return files, err
