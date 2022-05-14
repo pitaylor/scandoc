@@ -1,11 +1,16 @@
 package main
 
 import (
+	"embed"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
 	"time"
 )
+
+//go:embed ui/build
+var embeddedFiles embed.FS
 
 type Service struct {
 	Dir      string
@@ -41,15 +46,14 @@ func (s *Service) WorkPdfJobs() {
 		log.Println("job started")
 
 		var err error
-		stages := job.Settings.Stages
 		stageGlob := "out*.tif"
 
-		if contains(stages, "clean") {
+		if job.Settings.Clean {
 			err = job.CleanImages(stageGlob)
 			stageGlob = "clean*.png"
 		}
 
-		if contains(stages, "pdf") && err == nil {
+		if job.Settings.Pdf && err == nil {
 			err = job.GeneratePDF(stageGlob)
 
 			if err == nil {
@@ -69,7 +73,19 @@ func (s *Service) Start() {
 	go s.WorkScanJobs()
 	go s.WorkPdfJobs()
 
+	fileSystem, err := fs.Sub(embeddedFiles, "ui/build")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fileServer := http.FileServer(http.FS(fileSystem))
+
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		if req.Method == "GET" {
+			fileServer.ServeHTTP(w, req)
+			return
+		}
+
 		err := req.ParseForm()
 
 		if err != nil {
@@ -87,7 +103,7 @@ func (s *Service) Start() {
 	})
 
 	log.Println("listening on port 8090")
-	err := http.ListenAndServe(":8090", nil)
+	err = http.ListenAndServe(":8090", nil)
 
 	if err != nil {
 		log.Fatal(err)
