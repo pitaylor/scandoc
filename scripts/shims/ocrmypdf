@@ -16,3 +16,4 @@ input=${1?:is missing}
 output=${2?:is missing}
 
 cat "${input}" > "${output}"
+sleep $(( RANDOM & 0x3 ))

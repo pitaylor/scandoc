@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -28,43 +29,44 @@ func NewService() *Service {
 
 func (s *Service) WorkScanJobs() {
 	for job := range s.ScanJobs {
-		log.Println("scan started")
+		job.report(StatusInProgress, "scanning")
 
 		err := job.Scan()
 
 		if err == nil {
+			job.report(StatusInProgress, "scanning done, queued for processing")
 			s.PdfJobs <- job
-			log.Println("scan done")
 		} else {
-			log.Println("scan failed", err)
+			job.report(StatusInProgress, fmt.Sprintf("scan failed: %v", err))
 		}
 	}
 }
 
 func (s *Service) WorkPdfJobs() {
 	for job := range s.PdfJobs {
-		log.Println("job started")
-
 		var err error
 		stageGlob := "out*.tif"
 
 		if job.settings.Clean {
+			job.report(StatusInProgress, "cleaning images")
 			err = job.CleanImages(stageGlob)
 			stageGlob = "clean*.png"
 		}
 
 		if job.settings.Pdf && err == nil {
+			job.report(StatusInProgress, "generating PDF")
 			err = job.GeneratePDF(stageGlob)
 
 			if err == nil {
+				job.report(StatusInProgress, "removing temporary files")
 				err = job.CleanUp()
 			}
 		}
 
 		if err == nil {
-			log.Println("job done")
+			job.report(StatusDone, "done!")
 		} else {
-			log.Println("job failed", err)
+			job.report(StatusFailed, fmt.Sprintf("failed: %v", err))
 		}
 	}
 }
@@ -99,8 +101,12 @@ func (s *Service) Start() {
 			return
 		}
 
-		s.ScanJobs <- parseJob(s.Dir, req.Form)
+		job := s.parseJob(req.Form)
+		job.report(StatusInProgress, "queued for scanning")
+		s.ScanJobs <- job
 	})
+
+	http.HandleFunc("/ws", serveWs)
 
 	log.Println("listening on port 8090")
 	err = http.ListenAndServe(":8090", nil)
@@ -111,7 +117,7 @@ func (s *Service) Start() {
 }
 
 // parseJob creates a Job from POST/GET parameters.
-func parseJob(dir string, query url.Values) *Job {
+func (s *Service) parseJob(query url.Values) *Job {
 	name := time.Now().Format("2006-01-02")
 
 	if query.Has("name") {
@@ -123,5 +129,5 @@ func parseJob(dir string, query url.Values) *Job {
 	settings := NewSettings()
 	settings.ParseValues(query)
 
-	return NewJob(dir, name, settings)
+	return NewJob(s.Dir, name, settings)
 }

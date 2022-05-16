@@ -17,6 +17,19 @@ type Job struct {
 	name     string
 	dir      string
 	settings *Settings
+	client   *Client
+}
+
+type JobStatusType int
+
+const (
+	StatusInProgress JobStatusType = iota
+	StatusDone
+	StatusFailed
+)
+
+func (t JobStatusType) String() string {
+	return [...]string{"in_progress", "done", "failed"}[t]
 }
 
 var numberRegex = regexp.MustCompile("[0-9]+")
@@ -147,6 +160,14 @@ func (j *Job) globFiles(globPattern string) ([]string, error) {
 	})
 
 	return files, nil
+}
+
+func (j *Job) report(status JobStatusType, message string) {
+	log.Printf("job report: %v - %v\n", status, message)
+
+	if j.client != nil {
+		j.client.queueResponse(j, status, message)
+	}
 }
 
 func runCommand(cmd *exec.Cmd) error {

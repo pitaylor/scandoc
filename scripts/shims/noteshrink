@@ -27,3 +27,5 @@ for (( i=1; i <= "${#}"; i++ )); do
     cat "${!i}" > "${fn}"
     echo "(shrunk)" >> "${fn}"
 done
+
+sleep $(( RANDOM & 0x3 ))
