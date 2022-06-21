@@ -16,14 +16,11 @@ import {
   Slider,
   Stack,
   Switch,
+  TextField,
   Typography,
 } from "@mui/material";
-import { Settings, useParams } from "./Settings";
-
-const WS_HOST =
-  process.env.NODE_ENV === "development"
-    ? "localhost:8090"
-    : document.location.host;
+import settings from "./settings";
+import styles from "./styles";
 
 interface Job {
   id: string;
@@ -32,71 +29,34 @@ interface Job {
   message?: string;
 }
 
-const fileName = (fn: string) => {
-  const i = fn.lastIndexOf("/");
-  if (i !== -1) {
-    return fn.slice(i + 1);
-  } else {
-    return fn;
-  }
-};
+const WS_HOST =
+  process.env.NODE_ENV === "development"
+    ? "localhost:8090"
+    : document.location.host;
 
 function App() {
-  const { modes, resolutions, sources } = Settings;
-  const { params, searchParams, setParams } = useParams();
+  const [formData, setFormData] = useState({ name: "", ...settings.defaults });
   const [error, setError] = useState("");
   const [scanning, setScanning] = useState(false);
-
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const input = event.target as HTMLInputElement;
-    const value = input.type === "checkbox" ? input.checked : input.value;
-    setParams({ ...params, [input.name]: value });
-  };
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [connect, setConnect] = useState(0);
 
   const ws = useRef<null | WebSocket>(null);
-  const outgoing = useRef<string[]>([]);
-  const jobsRef = useRef<Record<string, Job>>({});
-  const [sentinel, setSentinel] = useState(0);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const sendQueue = useRef<string[]>([]);
+  const jobsData = useRef<Record<string, Job>>({});
 
-  const sendRequests = useRef(() => {
-    if (ws.current == null) {
-      return;
-    }
-    if (ws.current.readyState >= 2) {
-      ws.current = null;
-      setSentinel(sentinel + 1);
-      return;
-    }
-    let request = outgoing.current.shift();
-    while (request) {
-      ws.current.send(request);
-      request = outgoing.current.shift();
-    }
-  });
-
-  const sendRequest = (request: string) => {
-    outgoing.current.push(request);
-    sendRequests.current();
-  };
-
-  const blitJobs = () => {
-    setJobs(Object.values(jobsRef.current).reverse());
-  };
+  useEffect(() => {
+    const intervalId = setInterval(blitJobs, 250);
+    return () => clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     ws.current = new WebSocket(`ws://${WS_HOST}/ws`);
-    ws.current.onopen = () => {
-      console.log("websocket opened", sentinel);
-      sendRequests.current();
-    };
-    ws.current.onclose = () => console.log("websocket closed");
+    ws.current.onopen = () => sendRequests.current();
     ws.current.onmessage = (event) => {
-      const response = JSON.parse(event.data);
-      const { job, status, message } = response;
-      if (job) {
-        const { id, name } = job;
-        jobsRef.current[id] = { id, name, status, message };
+      const { id, name, status, message } = JSON.parse(event.data);
+      if (id) {
+        jobsData.current[id] = { id, name, status, message };
         if (message.includes("scanning done")) {
           setScanning(false);
         }
@@ -107,24 +67,61 @@ function App() {
     };
 
     const wsCurrent = ws.current;
-    const intervalId = setInterval(blitJobs, 250);
 
     return () => {
       if (wsCurrent != null) {
         wsCurrent.close();
       }
-      clearInterval(intervalId);
     };
-  }, [sentinel]);
+  }, [connect]);
+
+  // Sends queued requests to the websocket. This is a ref so that it can be called from an effect.
+  const sendRequests = useRef(() => {
+    if (ws.current == null) {
+      return;
+    }
+
+    if (
+      ws.current.readyState === WebSocket.CLOSING ||
+      ws.current.readyState === WebSocket.CLOSED
+    ) {
+      ws.current = null;
+      setConnect(connect + 1);
+      return;
+    }
+
+    let request = sendQueue.current.shift();
+
+    while (request) {
+      ws.current.send(request);
+      request = sendQueue.current.shift();
+    }
+  });
+
+  const sendRequest = (request: string) => {
+    sendQueue.current.push(request);
+    sendRequests.current();
+  };
+
+  const blitJobs = () => {
+    setJobs(Object.values(jobsData.current).reverse());
+  };
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.target as HTMLInputElement;
+    const value = input.type === "checkbox" ? input.checked : input.value;
+    setFormData({ ...formData, [input.name]: value });
+  };
 
   const handleScan = () => {
     setError("");
     setScanning(true);
-    sendRequest(searchParams.toString());
+    const { name, ...settings } = formData;
+    sendRequest(JSON.stringify({ name, settings }));
   };
 
   const handleDismiss = (jobId: string) => {
-    delete jobsRef.current[jobId];
+    delete jobsData.current[jobId];
     blitJobs();
   };
 
@@ -145,12 +142,12 @@ function App() {
               <FormLabel id="source-label">Page</FormLabel>
               <RadioGroup
                 aria-labelledby="source-label"
-                value={params.source}
+                value={formData.source}
                 name="source"
                 onChange={handleChange}
                 row
               >
-                {sources.map(({ value, label }) => (
+                {settings.available.sources.map(({ value, label }) => (
                   <FormControlLabel
                     key={value}
                     value={value}
@@ -165,12 +162,12 @@ function App() {
               <FormLabel id="mode-label">Mode</FormLabel>
               <RadioGroup
                 aria-labelledby="mode-label"
-                value={params.mode}
+                value={formData.mode}
                 name="mode"
                 onChange={handleChange}
                 row
               >
-                {modes.map(({ value, label }) => (
+                {settings.available.modes.map(({ value, label }) => (
                   <FormControlLabel
                     key={value}
                     value={value}
@@ -186,41 +183,56 @@ function App() {
               <Box sx={{ margin: "0 10px" }}>
                 <Slider
                   aria-labelledby="resolution-label"
-                  min={resolutions[0].value}
-                  max={resolutions[resolutions.length - 1].value}
-                  value={params.resolution}
+                  min={settings.available.resolutions[0].value}
+                  max={
+                    settings.available.resolutions[
+                      settings.available.resolutions.length - 1
+                    ].value
+                  }
+                  value={formData.resolution}
                   onChange={(event: Event, value: number | number[]) =>
-                    setParams({
-                      ...params,
+                    setFormData({
+                      ...formData,
                       resolution: value as number,
                     })
                   }
                   step={null}
-                  marks={resolutions}
+                  marks={settings.available.resolutions}
                 />
               </Box>
             </FormControl>
 
-            <FormControlLabel
-              control={
-                <Switch
-                  name={"clean"}
-                  checked={params.clean}
-                  onChange={handleChange}
-                />
-              }
-              label="Auto Clean"
-            />
+            <FormGroup row>
+              <FormControlLabel
+                control={
+                  <Switch
+                    name={"clean"}
+                    checked={formData.clean}
+                    onChange={handleChange}
+                  />
+                }
+                label="Auto Clean"
+              />
 
-            <FormControlLabel
-              control={
-                <Switch
-                  name={"pdf"}
-                  checked={params.pdf}
-                  onChange={handleChange}
-                />
-              }
-              label="PDF"
+              <FormControlLabel
+                control={
+                  <Switch
+                    name={"pdf"}
+                    checked={formData.pdf}
+                    onChange={handleChange}
+                  />
+                }
+                label="PDF"
+              />
+            </FormGroup>
+
+            <TextField
+              id="file-name"
+              name="name"
+              label="File Name"
+              variant="outlined"
+              value={formData.name}
+              onChange={handleChange}
             />
 
             <Button
@@ -243,16 +255,17 @@ function App() {
           {jobs.map((job) => (
             <Card key={job.id}>
               <CardContent sx={{ "&:last-child": { paddingBottom: "8px" } }}>
-                <Typography variant="body2">{fileName(job.name)}</Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2">{job.name}</Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={job.status === "in_progress" ? styles.loadingCss : {}}
+                >
                   {job.message}
                 </Typography>
                 <CardActions>
                   {job.status === "done" && (
-                    <React.Fragment>
-                      <Button size="small">Download</Button>
-                      <Button size="small">Delete</Button>
-                    </React.Fragment>
+                    <Button size="small">Download</Button>
                   )}
                   {job.status !== "in_progress" && (
                     <Button size="small" onClick={() => handleDismiss(job.id)}>

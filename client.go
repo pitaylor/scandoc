@@ -6,27 +6,14 @@ import (
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
-	"net/url"
 	"time"
 )
 
 // This file heavily borrows from https://github.com/gorilla/websocket/tree/master/examples/chat
 
 type Client struct {
-	conn *websocket.Conn
-
+	conn      *websocket.Conn
 	responses chan []byte
-}
-
-type JobResponse struct {
-	Id   string `json:"id"`
-	Name string `json:"name"`
-}
-
-type ClientResponse struct {
-	Job     *JobResponse `json:"job"`
-	Status  string       `json:"status"`
-	Message string       `json:"message"`
 }
 
 const (
@@ -53,27 +40,13 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (c *Client) queueResponse(job *Job, status JobStatusType, message string) {
-	response := ClientResponse{Status: status.String(), Message: message}
-
-	if job != nil {
-		var name string
-		if job.settings.Pdf {
-			name = job.name
-		} else {
-			name = job.dir
-		}
-		response.Job = &JobResponse{Id: job.id, Name: name}
-	}
-
-	responseJson, err := json.Marshal(response)
-
-	if err != nil {
+func (c *Client) queueResponse(job *Job) {
+	responseJson, err := json.Marshal(job)
+	if err == nil {
+		c.responses <- responseJson
+	} else {
 		log.Printf("queueResponse error: %v", err)
-		return
 	}
-
-	c.responses <- responseJson
 }
 
 func (c *Client) readRequests() {
@@ -97,17 +70,25 @@ func (c *Client) readRequests() {
 			break
 		}
 
-		log.Printf("job request: %v", request)
+		log.Printf("job request: %v", string(request))
 
-		// todo: make this json or something?
-		if values, err := url.ParseQuery(string(request)); err == nil {
-			job := service.parseJob(values)
-			job.client = c
+		tmp := struct {
+			Name     string    `json:"name"`
+			Settings *Settings `json:"settings"`
+		}{Settings: NewSettings()}
+
+		err = json.Unmarshal(request, &tmp)
+
+		if err == nil {
+			job := NewJob(service.Dir, tmp.Name, tmp.Settings)
+			job.Client = c
+
 			service.ScanJobs <- job
-			job.report(StatusInProgress, "queued for scanning")
+
+			job.report(InProgress, "queued for scanning")
 		} else {
 			log.Printf("job request error: %v", err)
-			c.queueResponse(nil, StatusFailed, fmt.Sprintf("failed: %v", err))
+			c.queueResponse(&Job{Status: Failed, Message: fmt.Sprintf("failed: %v", err)})
 		}
 	}
 }
@@ -116,7 +97,7 @@ func (c *Client) writeResponses() {
 	ticker := time.NewTicker(pingPeriod)
 
 	defer func() {
-		log.Println("client disconnected")
+		log.Println("Client disconnected")
 		ticker.Stop()
 		_ = c.conn.Close()
 	}()

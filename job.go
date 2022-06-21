@@ -10,33 +10,44 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
+
+type JobStatus int
 
 type Job struct {
-	id       string
-	name     string
-	dir      string
-	settings *Settings
-	client   *Client
+	Id       string    `json:"id"`
+	Name     string    `json:"name"`
+	Dir      string    `json:"dir"`
+	Status   JobStatus `json:"status"`
+	Message  string    `json:"message"`
+	Settings *Settings `json:"settings"`
+	Client   *Client   `json:"-"`
 }
-
-type JobStatusType int
 
 const (
-	StatusInProgress JobStatusType = iota
-	StatusDone
-	StatusFailed
+	InProgress JobStatus = iota
+	Done
+	Failed
 )
-
-func (t JobStatusType) String() string {
-	return [...]string{"in_progress", "done", "failed"}[t]
-}
 
 var numberRegex = regexp.MustCompile("[0-9]+")
 
-func NewJob(dir string, baseName string, settings *Settings) *Job {
+func (t JobStatus) String() string {
+	return [...]string{"in_progress", "done", "failed"}[t]
+}
+
+func (t JobStatus) MarshalText() (text []byte, err error) {
+	return []byte(t.String()), nil
+}
+
+func NewJob(dir string, name string, settings *Settings) *Job {
+	if name == "" {
+		name = time.Now().Format("2006-01-02") + " Document"
+	}
+
 	i := 0
-	path := filepath.Join(dir, baseName)
+	path := filepath.Join(dir, name)
 	suffix := ""
 
 	for {
@@ -55,19 +66,31 @@ func NewJob(dir string, baseName string, settings *Settings) *Job {
 	}
 
 	return &Job{
-		id:       uuid.NewString(),
-		name:     path + suffix + ".pdf",
-		dir:      path + suffix,
-		settings: settings,
+		Id:       uuid.NewString(),
+		Name:     name + suffix,
+		Dir:      dir,
+		Settings: settings,
 	}
 }
 
-// Scan scans a document using scanimage and produces a .tif file for each page in dir named `outN.tif`.
+func (j *Job) dir() string {
+	return filepath.Join(j.Dir, j.Name)
+}
+
+func (j *Job) url() string {
+	url := "/scans/" + j.Name
+	if j.Settings.Pdf {
+		url += ".pdf"
+	}
+	return url
+}
+
+// Scan scans a document using scanimage and produces a .tif file for each page in Dir named `outN.tif`.
 func (j *Job) Scan() error {
-	_, err := os.Stat(j.dir)
+	_, err := os.Stat(j.dir())
 
 	if os.IsNotExist(err) {
-		err = os.MkdirAll(j.dir, os.ModePerm)
+		err = os.MkdirAll(j.dir(), os.ModePerm)
 		if err != nil {
 			return err
 		}
@@ -77,15 +100,15 @@ func (j *Job) Scan() error {
 		"scanimage",
 		"--format=tiff",
 		"--batch",
-		"--source", j.settings.Source,
-		"--mode", j.settings.Mode,
-		"--resolution", strconv.Itoa(j.settings.Resolution),
-		"--brightness", strconv.Itoa(j.settings.Brightness),
-		"--contrast", strconv.Itoa(j.settings.Contrast),
+		"--source", j.Settings.Source,
+		"--mode", j.Settings.Mode,
+		"--resolution", strconv.Itoa(j.Settings.Resolution),
+		"--brightness", strconv.Itoa(j.Settings.Brightness),
+		"--contrast", strconv.Itoa(j.Settings.Contrast),
 		"--page-height", "0",
 	)
 
-	cmd.Dir = j.dir
+	cmd.Dir = j.dir()
 
 	err = runCommand(cmd)
 
@@ -97,7 +120,7 @@ func (j *Job) Scan() error {
 }
 
 // CleanImages cleans up scanned images specified by `globPattern` using NoteShrink and produces files named
-// `cleanN.png` in dir.
+// `cleanN.png` in Dir.
 func (j *Job) CleanImages(globPattern string) error {
 	files, err := j.globFiles(globPattern)
 
@@ -107,14 +130,14 @@ func (j *Job) CleanImages(globPattern string) error {
 
 	var args []string
 	args = append(args, "-c", "true") // skip pdf conversion
-	args = append(args, "-b", filepath.Join(j.dir, "clean"))
+	args = append(args, "-b", filepath.Join(j.dir(), "clean"))
 	args = append(args, files...)
 
 	cmd := exec.Command("noteshrink", args...)
 	return runCommand(cmd)
 }
 
-// GeneratePDF creates a PDF named `name` from image files specified by `globPattern` using img2pdf and ocrmypdf.
+// GeneratePDF creates a PDF named `Name` from image files specified by `globPattern` using img2pdf and ocrmypdf.
 func (j *Job) GeneratePDF(globPattern string) error {
 	files, err := j.globFiles(globPattern)
 
@@ -123,7 +146,7 @@ func (j *Job) GeneratePDF(globPattern string) error {
 	}
 
 	var args []string
-	pdfFile := filepath.Join(j.dir, "out.pdf")
+	pdfFile := filepath.Join(j.dir(), "out.pdf")
 	args = append(args, "--output", pdfFile)
 	args = append(args, files...)
 
@@ -139,17 +162,17 @@ func (j *Job) GeneratePDF(globPattern string) error {
 		"--rotate-pages",
 		"--clean",
 		pdfFile,
-		j.name,
+		filepath.Join(j.Dir, j.Name)+".pdf",
 	)
 	return runCommand(cmd)
 }
 
 func (j *Job) CleanUp() error {
-	return os.RemoveAll(j.dir)
+	return os.RemoveAll(j.dir())
 }
 
 func (j *Job) globFiles(globPattern string) ([]string, error) {
-	files, err := filepath.Glob(filepath.Join(j.dir, globPattern))
+	files, err := filepath.Glob(filepath.Join(j.dir(), globPattern))
 
 	if err != nil {
 		return files, err
@@ -162,11 +185,14 @@ func (j *Job) globFiles(globPattern string) ([]string, error) {
 	return files, nil
 }
 
-func (j *Job) report(status JobStatusType, message string) {
+func (j *Job) report(status JobStatus, message string) {
 	log.Printf("job report: %v - %v\n", status, message)
 
-	if j.client != nil {
-		j.client.queueResponse(j, status, message)
+	j.Status = status
+	j.Message = message
+
+	if j.Client != nil {
+		j.Client.queueResponse(j)
 	}
 }
 
