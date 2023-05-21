@@ -48,16 +48,19 @@ RUN git clone https://github.com/agl/jbig2enc.git \
 FROM debian:bullseye-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     img2pdf \
+    python3-dev \
     python3-pip \
+    python3-pkgconfig \
     sane \
     sane-utils \
     # ocrmypdf
     ghostscript \
     icc-profiles-free \
+    libcairo2-dev \
     libxml2 \
     pngquant \
-    python3-pip \
     tesseract-ocr \
     unpaper \
     zlib1g \
