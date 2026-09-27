@@ -16,3 +16,5 @@ done
 for f in "${@}"; do
   cat "${f}" >> "${output?:is missing}"
 done
+
+sleep $(( RANDOM & 0x3 ))

@@ -7,13 +7,13 @@ import (
 )
 
 type Settings struct {
-	Source     string
-	Mode       string
-	Resolution int
-	Brightness int
-	Contrast   int
-	Clean      bool
-	Pdf        bool
+	Source     string `json:"source"`
+	Mode       string `json:"mode"`
+	Resolution int    `json:"resolution"`
+	Brightness int    `json:"brightness"`
+	Contrast   int    `json:"contrast"`
+	Clean      bool   `json:"clean"`
+	Pdf        bool   `json:"pdf"`
 }
 
 func NewSettings() *Settings {

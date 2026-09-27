@@ -2,11 +2,10 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
-	"net/url"
-	"time"
 )
 
 //go:embed ui/build
@@ -28,43 +27,44 @@ func NewService() *Service {
 
 func (s *Service) WorkScanJobs() {
 	for job := range s.ScanJobs {
-		log.Println("scan started")
+		job.report(InProgress, "scanning")
 
 		err := job.Scan()
 
 		if err == nil {
+			job.report(InProgress, "scanning done, queued for processing")
 			s.PdfJobs <- job
-			log.Println("scan done")
 		} else {
-			log.Println("scan failed", err)
+			job.report(InProgress, fmt.Sprintf("scan failed: %v", err))
 		}
 	}
 }
 
 func (s *Service) WorkPdfJobs() {
 	for job := range s.PdfJobs {
-		log.Println("job started")
-
 		var err error
 		stageGlob := "out*.tif"
 
 		if job.Settings.Clean {
+			job.report(InProgress, "cleaning images")
 			err = job.CleanImages(stageGlob)
 			stageGlob = "clean*.png"
 		}
 
 		if job.Settings.Pdf && err == nil {
+			job.report(InProgress, "generating PDF")
 			err = job.GeneratePDF(stageGlob)
 
 			if err == nil {
+				job.report(InProgress, "removing temporary files")
 				err = job.CleanUp()
 			}
 		}
 
 		if err == nil {
-			log.Println("job done")
+			job.report(Done, "done!")
 		} else {
-			log.Println("job failed", err)
+			job.report(Failed, fmt.Sprintf("failed: %v", err))
 		}
 	}
 }
@@ -99,8 +99,19 @@ func (s *Service) Start() {
 			return
 		}
 
-		s.ScanJobs <- parseJob(s.Dir, req.Form)
+		settings := NewSettings()
+		settings.ParseValues(req.Form)
+
+		job := NewJob(s.Dir, req.Form.Get("Name"), settings)
+
+		s.ScanJobs <- job
+
+		job.report(InProgress, "queued for scanning")
 	})
+
+	http.HandleFunc("/ws", serveWs)
+
+	http.Handle("/scans/", http.StripPrefix("/scans", http.FileServer(http.Dir(s.Dir))))
 
 	log.Println("listening on port 8090")
 	err = http.ListenAndServe(":8090", nil)
@@ -108,30 +119,4 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-// parseJob creates a Job from POST/GET parameters.
-func parseJob(dir string, query url.Values) *Job {
-	name := time.Now().Format("2006-01-02")
-
-	if query.Has("name") {
-		name += " " + query.Get("name")
-	} else {
-		name += " Document"
-	}
-
-	settings := NewSettings()
-	settings.ParseValues(query)
-
-	return NewJob(dir, name, settings)
-}
-
-func contains(s []string, str string) bool {
-	for _, v := range s {
-		if v == str {
-			return true
-		}
-	}
-
-	return false
 }

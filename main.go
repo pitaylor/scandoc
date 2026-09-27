@@ -4,11 +4,13 @@ import (
 	"flag"
 )
 
-func main() {
-	s := NewService()
+var service *Service
 
-	flag.StringVar(&s.Dir, "dir", "scans", "directory for scans")
+func main() {
+	service = NewService()
+
+	flag.StringVar(&service.Dir, "dir", "scans", "directory for scans")
 	flag.Parse()
 
-	s.Start()
+	service.Start()
 }

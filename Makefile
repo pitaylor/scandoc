@@ -2,6 +2,7 @@
 
 PROGRAM = scandoc
 DOCKER_CONTEXT = default
+DOCKER_HOST ?=
 DOCKER_IMAGE = docker.entangle.net/$(PROGRAM):latest
 SCAN_DIR = $(realpath scans)
 DEVICE_MAJOR = 189
@@ -10,6 +11,7 @@ DEVICE_MAJOR = 189
 -include .env
 
 export DOCKER_CONTEXT
+export DOCKER_HOST
 export DOCKER_IMAGE
 export SCAN_DIR
 export DEVICE_MAJOR
@@ -30,10 +32,10 @@ setup:
 	cd ui && npm $(if $(filter true,$(CI)),clean-install,install)
 
 start:
-	scripts/start.sh
+	@scripts/start.sh
 
 container: image
-	scripts/container.sh
+	@scripts/container.sh
 
 test:
 	# CI=true is used to run tests non-interactively
