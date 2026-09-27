@@ -51,7 +51,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    ws.current = new WebSocket(`ws://${WS_HOST}/ws`);
+    const wsScheme = document.location.protocol === "https:" ? "wss" : "ws";
+    ws.current = new WebSocket(`${wsScheme}://${WS_HOST}/ws`);
     ws.current.onopen = () => sendRequests.current();
     ws.current.onmessage = (event) => {
       const { id, name, status, message } = JSON.parse(event.data);

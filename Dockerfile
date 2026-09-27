@@ -21,7 +21,7 @@ COPY --from=build-ui /work/build ./ui/build
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o scandoc
 
-FROM debian:bullseye-slim as build-jbig2enc
+FROM debian:bookworm-slim as build-jbig2enc
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     automake \
@@ -45,7 +45,7 @@ RUN git clone https://github.com/agl/jbig2enc.git \
     && mkdir /build/jbig2enc-install \
     && make install DESTDIR=/build/jbig2enc-install
 
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     img2pdf \
@@ -72,10 +72,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ADD https://www.josharcher.uk/static/files/2016/10/1300_0C26.nal /usr/share/sane/epjitsu/1300_0C26.nal
 RUN echo epjitsu > /etc/sane.d/dll.conf
 
-ENV OCRMYPDF_VERSION 13.4.3
+ENV OCRMYPDF_VERSION 17.12.1
 ENV NOTESHRINK_VERSION 0.1.1
 
-RUN pip install noteshrink==${NOTESHRINK_VERSION} ocrmypdf==${OCRMYPDF_VERSION}
+RUN pip install --break-system-packages noteshrink==${NOTESHRINK_VERSION} ocrmypdf==${OCRMYPDF_VERSION}
 
 COPY --from=build-jbig2enc /build/jbig2enc-install/ /
 COPY --from=build-scandoc /build/scandoc /usr/local/bin/scandoc
