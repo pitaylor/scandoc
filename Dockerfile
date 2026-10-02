@@ -1,4 +1,4 @@
-FROM node:17.9 as build-ui
+FROM node:17.9 AS build-ui
 
 WORKDIR /work
 
@@ -8,7 +8,7 @@ RUN npm clean-install
 COPY ui/ ./
 RUN npm run build
 
-FROM golang:1.17-alpine as build-scandoc
+FROM golang:1.17-alpine AS build-scandoc
 
 WORKDIR /build
 
@@ -21,7 +21,7 @@ COPY --from=build-ui /work/build ./ui/build
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o scandoc
 
-FROM debian:bookworm-slim as build-jbig2enc
+FROM debian:bookworm-slim AS build-jbig2enc
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     automake \
@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
-ENV JBIG2ENC_REV ea6a40a
+ENV JBIG2ENC_REV=ea6a40a
 
 RUN git clone https://github.com/agl/jbig2enc.git \
     && cd jbig2enc \
@@ -71,8 +71,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ADD https://www.josharcher.uk/static/files/2016/10/1300_0C26.nal /usr/share/sane/epjitsu/1300_0C26.nal
 RUN echo epjitsu > /etc/sane.d/dll.conf
 
-ENV OCRMYPDF_VERSION 17.12.1
-ENV NOTESHRINK_VERSION 0.1.1
+ENV OCRMYPDF_VERSION=17.12.1
+ENV NOTESHRINK_VERSION=0.1.1
 
 RUN pip install --break-system-packages noteshrink==${NOTESHRINK_VERSION} ocrmypdf==${OCRMYPDF_VERSION}
 
@@ -83,4 +83,4 @@ EXPOSE 8090
 
 WORKDIR /work
 
-CMD /bin/bash
+CMD ["/bin/bash"]
